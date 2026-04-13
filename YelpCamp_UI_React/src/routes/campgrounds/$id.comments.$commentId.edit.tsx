@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { fetchComment } from '@/api/comments'
 import { CommentForm } from '@/components/comment-form'
 import { ErrorDisplay } from '@/components/error-display'
@@ -46,14 +47,16 @@ function CommentEdit() {
 
   const updateMutation = useUpdateComment(numericId)
 
+  useEffect(() => {
+    if (comment && !isOwner(comment.authorId)) {
+      flash.error('You do not have permission to do that')
+      navigate({ to: '/campgrounds/$id', params: { id } })
+    }
+  }, [comment, isOwner, flash, navigate, id])
+
   if (isLoading) return <LoadingSpinner />
   if (error || !comment) return <ErrorDisplay message="Comment not found" />
-
-  if (!isOwner(comment.authorId)) {
-    flash.error('You do not have permission to do that')
-    navigate({ to: '/campgrounds/$id', params: { id } })
-    return null
-  }
+  if (!isOwner(comment.authorId)) return <LoadingSpinner />
 
   const onSubmit = async (data: CommentInput) => {
     try {

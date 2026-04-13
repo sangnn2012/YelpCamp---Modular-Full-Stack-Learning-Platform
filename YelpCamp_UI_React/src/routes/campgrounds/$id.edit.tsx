@@ -1,4 +1,5 @@
 import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { CampgroundForm } from '@/components/campground-form'
 import { ErrorDisplay } from '@/components/error-display'
 import { LoadingSpinner } from '@/components/loading-spinner'
@@ -32,14 +33,16 @@ function CampgroundEdit() {
   const { data: campground, isLoading, error } = useCampground(numericId)
   const updateMutation = useUpdateCampground()
 
+  useEffect(() => {
+    if (campground && !isOwner(campground.authorId)) {
+      flash.error("You don't have permission to do that")
+      navigate({ to: '/campgrounds/$id', params: { id } })
+    }
+  }, [campground, isOwner, flash, navigate, id])
+
   if (isLoading) return <LoadingSpinner />
   if (error || !campground) return <ErrorDisplay message="Campground not found" />
-
-  if (!isOwner(campground.authorId)) {
-    flash.error("You don't have permission to do that")
-    navigate({ to: '/campgrounds/$id', params: { id } })
-    return null
-  }
+  if (!isOwner(campground.authorId)) return <LoadingSpinner />
 
   const onSubmit = async (data: CampgroundInput) => {
     try {
