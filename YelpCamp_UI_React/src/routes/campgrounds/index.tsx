@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { Plus, Search } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { CampgroundCard } from '@/components/campground-card'
 import { ErrorDisplay } from '@/components/error-display'
@@ -26,6 +26,10 @@ function CampgroundsPage() {
   const user = useAuthStore((s) => s.user)
   const { data, isLoading, error } = useCampgrounds(page, search)
   const [searchInput, setSearchInput] = useState(search || '')
+
+  useEffect(() => {
+    setSearchInput(search || '')
+  }, [search])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
