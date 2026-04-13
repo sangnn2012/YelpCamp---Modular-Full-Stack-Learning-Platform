@@ -1,80 +1,72 @@
 package handlers
 
 import (
-	"context"
-	"encoding/json"
 	"net/http"
-	"os"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sangnn2012/yelpcamp-api-go/internal/middleware"
 	"github.com/sangnn2012/yelpcamp-api-go/internal/models"
-	"github.com/sangnn2012/yelpcamp-api-go/pkg/validator"
+	"github.com/sangnn2012/yelpcamp-api-go/pkg/database"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthHandler struct {
-	db *pgxpool.Pool
+	db        database.DB
+	jwtSecret string
 }
 
-func NewAuthHandler(db *pgxpool.Pool) *AuthHandler {
-	return &AuthHandler{db: db}
+func NewAuthHandler(db database.DB, jwtSecret string) *AuthHandler {
+	return &AuthHandler{db: db, jwtSecret: jwtSecret}
 }
 
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Register(c *gin.Context) {
 	var req models.RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	if err := validator.Validate(req); err != nil {
-		errors := validator.ValidationErrors(err)
-		respondError(w, http.StatusBadRequest, errors[0])
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Check if user exists
 	var exists bool
-	err := h.db.QueryRow(context.Background(),
+	err := h.db.QueryRow(c.Request.Context(),
 		"SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 OR email = $2)",
 		req.Username, req.Email).Scan(&exists)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Database error")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 	if exists {
-		respondError(w, http.StatusConflict, "Username or email already exists")
+		c.JSON(http.StatusConflict, gin.H{"error": "Username or email already exists"})
 		return
 	}
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to hash password")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
 
 	// Create user
 	userID := uuid.New().String()
 	now := time.Now()
-	_, err = h.db.Exec(context.Background(),
+	_, err = h.db.Exec(c.Request.Context(),
 		`INSERT INTO users (id, username, email, password, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		userID, req.Username, req.Email, string(hashedPassword), now, now)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to create user")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
 
 	// Generate token and set cookie
-	token := generateToken(userID)
-	setTokenCookie(w, token)
+	token := h.generateToken(userID)
+	setTokenCookie(c, token)
 
-	respondJSON(w, http.StatusCreated, models.User{
+	c.JSON(http.StatusCreated, models.User{
 		ID:        userID,
 		Username:  req.Username,
 		Email:     req.Email,
@@ -83,87 +75,70 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Login(c *gin.Context) {
 	var req models.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	if err := validator.Validate(req); err != nil {
-		errors := validator.ValidationErrors(err)
-		respondError(w, http.StatusBadRequest, errors[0])
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Find user
 	var user models.User
 	var hashedPassword string
-	err := h.db.QueryRow(context.Background(),
+	err := h.db.QueryRow(c.Request.Context(),
 		`SELECT id, username, email, password, created_at, updated_at
 		 FROM users WHERE username = $1`,
 		req.Username).Scan(&user.ID, &user.Username, &user.Email, &hashedPassword, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		respondError(w, http.StatusUnauthorized, "Invalid credentials")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(req.Password)); err != nil {
-		respondError(w, http.StatusUnauthorized, "Invalid credentials")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
 	// Generate token and set cookie
-	token := generateToken(user.ID)
-	setTokenCookie(w, token)
+	token := h.generateToken(user.ID)
+	setTokenCookie(c, token)
 
-	respondJSON(w, http.StatusOK, user)
+	c.JSON(http.StatusOK, user)
 }
 
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     "token",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-	})
-	respondJSON(w, http.StatusOK, map[string]string{"message": "Logged out"})
+func (h *AuthHandler) Logout(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("token", "", -1, "/", "", false, true)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
 
-func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
+func (h *AuthHandler) Me(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 
 	var user models.User
-	err := h.db.QueryRow(context.Background(),
+	err := h.db.QueryRow(c.Request.Context(),
 		`SELECT id, username, email, created_at, updated_at
 		 FROM users WHERE id = $1`, userID).
 		Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		respondError(w, http.StatusNotFound, "User not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, user)
+	c.JSON(http.StatusOK, user)
 }
 
-func generateToken(userID string) string {
+func (h *AuthHandler) generateToken(userID string) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userID,
 		"exp": time.Now().Add(7 * 24 * time.Hour).Unix(),
 	})
-	tokenString, _ := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	tokenString, _ := token.SignedString([]byte(h.jwtSecret))
 	return tokenString
 }
 
-func setTokenCookie(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     "token",
-		Value:    token,
-		Path:     "/",
-		MaxAge:   7 * 24 * 60 * 60,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+func setTokenCookie(c *gin.Context, token string) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("token", token, 7*24*60*60, "/", "", false, true)
 }

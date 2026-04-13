@@ -42,38 +42,38 @@ type Author struct {
 
 // Request/Response types
 type RegisterRequest struct {
-	Username string `json:"username" validate:"required,min=3,max=30,alphanum"`
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
+	Username string `json:"username" binding:"required,min=3,max=30,alphanum"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
 }
 
 type LoginRequest struct {
-	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 type CreateCampgroundRequest struct {
-	Name        string  `json:"name" validate:"required,max=100"`
-	Price       string  `json:"price" validate:"required"`
-	Image       string  `json:"image" validate:"required,url"`
-	Description string  `json:"description" validate:"required,max=5000"`
-	Location    *string `json:"location,omitempty" validate:"omitempty,max=200"`
+	Name        string  `json:"name" binding:"required,max=100"`
+	Price       string  `json:"price" binding:"required"`
+	Image       string  `json:"image" binding:"required,url"`
+	Description string  `json:"description" binding:"required,max=5000"`
+	Location    *string `json:"location,omitempty" binding:"omitempty,max=200"`
 }
 
 type UpdateCampgroundRequest struct {
-	Name        *string `json:"name,omitempty" validate:"omitempty,max=100"`
+	Name        *string `json:"name,omitempty" binding:"omitempty,max=100"`
 	Price       *string `json:"price,omitempty"`
-	Image       *string `json:"image,omitempty" validate:"omitempty,url"`
-	Description *string `json:"description,omitempty" validate:"omitempty,max=5000"`
-	Location    *string `json:"location,omitempty" validate:"omitempty,max=200"`
+	Image       *string `json:"image,omitempty" binding:"omitempty,url"`
+	Description *string `json:"description,omitempty" binding:"omitempty,max=5000"`
+	Location    *string `json:"location,omitempty" binding:"omitempty,max=200"`
 }
 
 type CreateCommentRequest struct {
-	Text string `json:"text" validate:"required,max=500"`
+	Text string `json:"text" binding:"required,max=500"`
 }
 
 type UpdateCommentRequest struct {
-	Text string `json:"text" validate:"required,max=500"`
+	Text string `json:"text" binding:"required,max=500"`
 }
 
 type PaginatedResponse struct {

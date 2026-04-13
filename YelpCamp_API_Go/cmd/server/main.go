@@ -1,98 +1,172 @@
 package main
 
 import (
-	"log"
+	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
-	"github.com/joho/godotenv"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/sangnn2012/yelpcamp-api-go/internal/config"
 	"github.com/sangnn2012/yelpcamp-api-go/internal/handlers"
+	"github.com/sangnn2012/yelpcamp-api-go/internal/logger"
 	mw "github.com/sangnn2012/yelpcamp-api-go/internal/middleware"
 	"github.com/sangnn2012/yelpcamp-api-go/pkg/database"
 )
 
 func main() {
-	// Load .env file
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		logger.L().Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// Connect to database
-	db, err := database.Connect(os.Getenv("DATABASE_URL"))
+	db, err := database.Connect(cfg.Database.URL)
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		logger.L().Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
-	defer db.Close()
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(db)
+	authHandler := handlers.NewAuthHandler(db, cfg.Jwt.Secret)
 	campgroundHandler := handlers.NewCampgroundHandler(db)
 	commentHandler := handlers.NewCommentHandler(db)
 
-	// Setup router
-	r := chi.NewRouter()
-
-	// Middleware
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:3003"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+	// Setup Gin engine
+	engine := gin.New()
+	engine.Use(gin.Recovery(), ginLogMiddleware())
+	engine.Use(cors.New(cors.Config{
+		AllowOrigins:     cfg.CORS.AllowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}))
 
 	// Health check
-	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok","service":"YelpCamp API (Go)"}`))
-	})
-
-	// Auth routes
-	r.Route("/api/auth", func(r chi.Router) {
-		r.Post("/register", authHandler.Register)
-		r.Post("/login", authHandler.Login)
-		r.Post("/logout", authHandler.Logout)
-		r.With(mw.RequireAuth).Get("/me", authHandler.Me)
-	})
-
-	// Campground routes
-	r.Route("/api/campgrounds", func(r chi.Router) {
-		r.Get("/", campgroundHandler.List)
-		r.Get("/{id}", campgroundHandler.GetByID)
-
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireAuth)
-			r.Post("/", campgroundHandler.Create)
-			r.Put("/{id}", campgroundHandler.Update)
-			r.Delete("/{id}", campgroundHandler.Delete)
+	engine.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"service": "YelpCamp API (Go)",
 		})
 	})
 
-	// Comment routes
-	r.Route("/api/campgrounds/{campgroundId}/comments", func(r chi.Router) {
-		r.Use(mw.RequireAuth)
-		r.Post("/", commentHandler.Create)
-	})
+	api := engine.Group("/api")
 
-	r.Route("/api/comments", func(r chi.Router) {
-		r.Use(mw.RequireAuth)
-		r.Put("/{id}", commentHandler.Update)
-		r.Delete("/{id}", commentHandler.Delete)
-	})
-
-	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3004"
+	// Auth routes
+	auth := api.Group("/auth")
+	{
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/logout", authHandler.Logout)
+		auth.GET("/me", mw.RequireAuth(cfg.Jwt.Secret), authHandler.Me)
 	}
 
-	log.Printf("Server starting on port %s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
-		log.Fatal(err)
+	// Campground routes
+	campgrounds := api.Group("/campgrounds")
+	{
+		campgrounds.GET("/", campgroundHandler.List)
+		campgrounds.GET("/:id", campgroundHandler.GetByID)
+
+		protected := campgrounds.Group("/")
+		protected.Use(mw.RequireAuth(cfg.Jwt.Secret))
+		{
+			protected.POST("/", campgroundHandler.Create)
+			protected.PUT("/:id", campgroundHandler.Update)
+			protected.DELETE("/:id", campgroundHandler.Delete)
+		}
+	}
+
+	// Comment routes (nested under campgrounds)
+	campgroundComments := api.Group("/campgrounds/:campgroundId/comments")
+	campgroundComments.Use(mw.RequireAuth(cfg.Jwt.Secret))
+	{
+		campgroundComments.POST("/", commentHandler.Create)
+	}
+
+	// Comment routes (standalone)
+	comments := api.Group("/comments")
+	comments.Use(mw.RequireAuth(cfg.Jwt.Secret))
+	{
+		comments.PUT("/:id", commentHandler.Update)
+		comments.DELETE("/:id", commentHandler.Delete)
+	}
+
+	// Start server with graceful shutdown
+	srv := &http.Server{
+		Addr:    cfg.HTTPServer.Address(),
+		Handler: engine,
+	}
+
+	serverErrCh := make(chan error, 1)
+
+	go func() {
+		logger.L().Info("server starting", "addr", cfg.HTTPServer.Address())
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.L().Error("server failed to start", "error", err)
+			serverErrCh <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.L().Info("shutting down server...")
+	case err := <-serverErrCh:
+		logger.L().Error("server startup failed", "error", err)
+		os.Exit(1)
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.L().Error("server shutdown error", "error", err)
+	}
+
+	db.Close()
+	logger.L().Info("server stopped cleanly")
+}
+
+// ginLogMiddleware returns a Gin middleware that logs requests using slog.
+func ginLogMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		c.Next()
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		method := c.Request.Method
+		path := c.Request.URL.Path
+		clientIP := c.ClientIP()
+		userAgent := c.Request.UserAgent()
+
+		var level slog.Level
+		switch {
+		case status >= 500:
+			level = slog.LevelError
+		case status >= 400:
+			level = slog.LevelWarn
+		default:
+			level = slog.LevelInfo
+		}
+
+		logger.L().LogAttrs(c.Request.Context(), level, "incoming request",
+			slog.Int("status", status),
+			slog.String("method", method),
+			slog.String("path", path),
+			slog.String("ip", clientIP),
+			slog.String("user_agent", userAgent),
+			slog.Duration("latency", latency),
+		)
 	}
 }

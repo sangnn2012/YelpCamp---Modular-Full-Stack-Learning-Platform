@@ -1,35 +1,32 @@
 package handlers
 
 import (
-	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/gin-gonic/gin"
 	"github.com/sangnn2012/yelpcamp-api-go/internal/middleware"
 	"github.com/sangnn2012/yelpcamp-api-go/internal/models"
-	"github.com/sangnn2012/yelpcamp-api-go/pkg/validator"
+	"github.com/sangnn2012/yelpcamp-api-go/pkg/database"
 )
 
 type CampgroundHandler struct {
-	db *pgxpool.Pool
+	db database.DB
 }
 
-func NewCampgroundHandler(db *pgxpool.Pool) *CampgroundHandler {
+func NewCampgroundHandler(db database.DB) *CampgroundHandler {
 	return &CampgroundHandler{db: db}
 }
 
-func (h *CampgroundHandler) List(w http.ResponseWriter, r *http.Request) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+func (h *CampgroundHandler) List(c *gin.Context) {
+	page, _ := strconv.Atoi(c.Query("page"))
 	if page < 1 {
 		page = 1
 	}
 	limit := 12
 	offset := (page - 1) * limit
-	search := r.URL.Query().Get("search")
+	search := c.Query("search")
 
 	// Count total
 	var total int
@@ -39,7 +36,7 @@ func (h *CampgroundHandler) List(w http.ResponseWriter, r *http.Request) {
 		countQuery += " WHERE name ILIKE $1 OR description ILIKE $1 OR location ILIKE $1"
 		args = append(args, "%"+search+"%")
 	}
-	h.db.QueryRow(context.Background(), countQuery, args...).Scan(&total)
+	h.db.QueryRow(c.Request.Context(), countQuery, args...).Scan(&total)
 
 	// Get campgrounds
 	query := `
@@ -57,30 +54,30 @@ func (h *CampgroundHandler) List(w http.ResponseWriter, r *http.Request) {
 		args = []interface{}{limit, offset}
 	}
 
-	rows, err := h.db.Query(context.Background(), query, args...)
+	rows, err := h.db.Query(c.Request.Context(), query, args...)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Database error")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 	defer rows.Close()
 
 	campgrounds := []models.Campground{}
 	for rows.Next() {
-		var c models.Campground
+		var cg models.Campground
 		var authorID, authorUsername *string
-		err := rows.Scan(&c.ID, &c.Name, &c.Price, &c.Image, &c.Description, &c.Location,
-			&c.AuthorID, &c.CreatedAt, &c.UpdatedAt, &authorID, &authorUsername)
+		err := rows.Scan(&cg.ID, &cg.Name, &cg.Price, &cg.Image, &cg.Description, &cg.Location,
+			&cg.AuthorID, &cg.CreatedAt, &cg.UpdatedAt, &authorID, &authorUsername)
 		if err != nil {
 			continue
 		}
 		if authorID != nil && authorUsername != nil {
-			c.Author = &models.Author{ID: *authorID, Username: *authorUsername}
+			cg.Author = &models.Author{ID: *authorID, Username: *authorUsername}
 		}
-		campgrounds = append(campgrounds, c)
+		campgrounds = append(campgrounds, cg)
 	}
 
 	totalPages := (total + limit - 1) / limit
-	respondJSON(w, http.StatusOK, models.PaginatedResponse{
+	c.JSON(http.StatusOK, models.PaginatedResponse{
 		Data: campgrounds,
 		Pagination: models.Pagination{
 			Page:       page,
@@ -92,35 +89,35 @@ func (h *CampgroundHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *CampgroundHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+func (h *CampgroundHandler) GetByID(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid campground ID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 		return
 	}
 
-	var c models.Campground
+	var cg models.Campground
 	var authorID, authorUsername *string
-	err = h.db.QueryRow(context.Background(), `
+	err = h.db.QueryRow(c.Request.Context(), `
 		SELECT c.id, c.name, c.price, c.image, c.description, c.location, c.author_id,
 			   c.created_at, c.updated_at, u.id, u.username
 		FROM campgrounds c
 		LEFT JOIN users u ON c.author_id = u.id
 		WHERE c.id = $1
-	`, id).Scan(&c.ID, &c.Name, &c.Price, &c.Image, &c.Description, &c.Location,
-		&c.AuthorID, &c.CreatedAt, &c.UpdatedAt, &authorID, &authorUsername)
+	`, id).Scan(&cg.ID, &cg.Name, &cg.Price, &cg.Image, &cg.Description, &cg.Location,
+		&cg.AuthorID, &cg.CreatedAt, &cg.UpdatedAt, &authorID, &authorUsername)
 
 	if err != nil {
-		respondError(w, http.StatusNotFound, "Campground not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
 		return
 	}
 
 	if authorID != nil && authorUsername != nil {
-		c.Author = &models.Author{ID: *authorID, Username: *authorUsername}
+		cg.Author = &models.Author{ID: *authorID, Username: *authorUsername}
 	}
 
 	// Get comments
-	rows, _ := h.db.Query(context.Background(), `
+	rows, _ := h.db.Query(c.Request.Context(), `
 		SELECT c.id, c.text, c.campground_id, c.author_id, c.created_at, c.updated_at,
 			   u.id, u.username
 		FROM comments c
@@ -130,7 +127,7 @@ func (h *CampgroundHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	`, id)
 	defer rows.Close()
 
-	c.Comments = []models.Comment{}
+	cg.Comments = []models.Comment{}
 	for rows.Next() {
 		var comment models.Comment
 		var aID, aUsername *string
@@ -139,41 +136,35 @@ func (h *CampgroundHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		if aID != nil && aUsername != nil {
 			comment.Author = &models.Author{ID: *aID, Username: *aUsername}
 		}
-		c.Comments = append(c.Comments, comment)
+		cg.Comments = append(cg.Comments, comment)
 	}
 
-	respondJSON(w, http.StatusOK, c)
+	c.JSON(http.StatusOK, cg)
 }
 
-func (h *CampgroundHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
+func (h *CampgroundHandler) Create(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 
 	var req models.CreateCampgroundRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	if err := validator.Validate(req); err != nil {
-		errors := validator.ValidationErrors(err)
-		respondError(w, http.StatusBadRequest, errors[0])
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	now := time.Now()
 	var id int
-	err := h.db.QueryRow(context.Background(), `
+	err := h.db.QueryRow(c.Request.Context(), `
 		INSERT INTO campgrounds (name, price, image, description, location, author_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 	`, req.Name, req.Price, req.Image, req.Description, req.Location, userID, now, now).Scan(&id)
 
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to create campground")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create campground"})
 		return
 	}
 
-	respondJSON(w, http.StatusCreated, models.Campground{
+	c.JSON(http.StatusCreated, models.Campground{
 		ID:          id,
 		Name:        req.Name,
 		Price:       req.Price,
@@ -186,29 +177,29 @@ func (h *CampgroundHandler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *CampgroundHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+func (h *CampgroundHandler) Update(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid campground ID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 		return
 	}
 
 	// Check ownership
 	var authorID *string
-	h.db.QueryRow(context.Background(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
+	h.db.QueryRow(c.Request.Context(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
 	if authorID == nil || *authorID != userID {
-		respondError(w, http.StatusForbidden, "You don't have permission to do that")
+		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to do that"})
 		return
 	}
 
 	var req models.UpdateCampgroundRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	_, err = h.db.Exec(context.Background(), `
+	_, err = h.db.Exec(c.Request.Context(), `
 		UPDATE campgrounds SET
 			name = COALESCE($1, name),
 			price = COALESCE($2, price),
@@ -220,34 +211,34 @@ func (h *CampgroundHandler) Update(w http.ResponseWriter, r *http.Request) {
 	`, req.Name, req.Price, req.Image, req.Description, req.Location, time.Now(), id)
 
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to update campground")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update campground"})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"message": "Campground updated"})
+	c.JSON(http.StatusOK, gin.H{"message": "Campground updated"})
 }
 
-func (h *CampgroundHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+func (h *CampgroundHandler) Delete(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid campground ID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 		return
 	}
 
 	// Check ownership
 	var authorID *string
-	h.db.QueryRow(context.Background(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
+	h.db.QueryRow(c.Request.Context(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
 	if authorID == nil || *authorID != userID {
-		respondError(w, http.StatusForbidden, "You don't have permission to do that")
+		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to do that"})
 		return
 	}
 
-	_, err = h.db.Exec(context.Background(), "DELETE FROM campgrounds WHERE id = $1", id)
+	_, err = h.db.Exec(c.Request.Context(), "DELETE FROM campgrounds WHERE id = $1", id)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to delete campground")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete campground"})
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"message": "Campground deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "Campground deleted"})
 }
