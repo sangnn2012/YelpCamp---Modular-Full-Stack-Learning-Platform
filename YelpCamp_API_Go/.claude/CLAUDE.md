@@ -2,18 +2,20 @@
 
 ## Overview
 
-Go REST API backend using idiomatic Go patterns with Chi router, pgx for PostgreSQL, and JWT authentication.
+Go REST API backend using Gin framework with pgx for PostgreSQL, JWT authentication, and structured logging via slog.
 
 ## Tech Stack
 
 | Category | Technology |
 |----------|------------|
-| Language | Go 1.21+ |
-| Router | Chi v5 (idiomatic, lightweight) |
+| Language | Go 1.24 |
+| Framework | Gin v1.11.0 |
 | Database | pgx/v5 (PostgreSQL driver) |
-| Validation | go-playground/validator/v10 |
+| Validation | Gin built-in binding (go-playground/validator/v10) |
 | Auth | golang-jwt/jwt/v5 + bcrypt |
-| Environment | godotenv |
+| CORS | gin-contrib/cors |
+| Logging | log/slog (stdlib, JSON handler singleton) |
+| Config | Struct-based with env vars |
 
 ## Project Structure
 
@@ -21,22 +23,23 @@ Go REST API backend using idiomatic Go patterns with Chi router, pgx for Postgre
 YelpCamp_API_Go/
 ├── cmd/
 │   └── server/
-│       └── main.go           # Entry point, router setup
+│       └── main.go           # Entry point, Gin engine, routes, graceful shutdown
 ├── internal/
-│   ├── handlers/             # HTTP handlers
+│   ├── config/
+│   │   └── config.go         # Centralized config struct with env vars
+│   ├── logger/
+│   │   └── log.go            # slog singleton (JSON handler)
+│   ├── handlers/             # HTTP handlers (gin.Context)
 │   │   ├── auth.go           # Register, Login, Logout, Me
 │   │   ├── campground.go     # CRUD + List with pagination
-│   │   ├── comment.go        # CRUD
-│   │   └── helpers.go        # respondJSON, respondError
+│   │   └── comment.go        # CRUD
 │   ├── middleware/
-│   │   └── auth.go           # JWT auth middleware
+│   │   └── auth.go           # JWT auth middleware (gin.HandlerFunc)
 │   └── models/
-│       └── models.go         # All domain models
+│       └── models.go         # All domain models + request types
 ├── pkg/
-│   ├── database/
-│   │   └── database.go       # pgx connection pool
-│   └── validator/
-│       └── validator.go      # Validation wrapper
+│   └── database/
+│       └── database.go       # pgx connection pool
 ├── go.mod
 ├── .env.example
 └── .gitignore
@@ -73,62 +76,62 @@ go run cmd/server/main.go
 | Method | Path | Handler | Auth |
 |--------|------|---------|------|
 | GET | /api/campgrounds | List | No |
-| GET | /api/campgrounds/{id} | GetByID | No |
+| GET | /api/campgrounds/:id | GetByID | No |
 | POST | /api/campgrounds | Create | Yes |
-| PUT | /api/campgrounds/{id} | Update | Yes (owner) |
-| DELETE | /api/campgrounds/{id} | Delete | Yes (owner) |
+| PUT | /api/campgrounds/:id | Update | Yes (owner) |
+| DELETE | /api/campgrounds/:id | Delete | Yes (owner) |
 
 ### Comments
 | Method | Path | Handler | Auth |
 |--------|------|---------|------|
-| POST | /api/campgrounds/{campgroundId}/comments | Create | Yes |
-| PUT | /api/comments/{id} | Update | Yes (owner) |
-| DELETE | /api/comments/{id} | Delete | Yes (owner) |
+| POST | /api/campgrounds/:campgroundId/comments | Create | Yes |
+| PUT | /api/comments/:id | Update | Yes (owner) |
+| DELETE | /api/comments/:id | Delete | Yes (owner) |
 
 ## Code Patterns
 
 ### Handler Pattern
 ```go
-func (h *CampgroundHandler) Create(w http.ResponseWriter, r *http.Request) {
-    userID := middleware.GetUserID(r)
+func (h *CampgroundHandler) Create(c *gin.Context) {
+    userID := middleware.GetUserID(c)
 
     var req models.CreateCampgroundRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        respondError(w, http.StatusBadRequest, "Invalid request body")
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
 
-    if err := validator.Validate(req); err != nil {
-        errors := validator.ValidationErrors(err)
-        respondError(w, http.StatusBadRequest, errors[0])
-        return
-    }
+    // Database operation using request context...
+    h.db.QueryRow(c.Request.Context(), query, args...)
 
-    // Database operation...
-    respondJSON(w, http.StatusCreated, result)
+    c.JSON(http.StatusCreated, result)
 }
 ```
 
 ### Middleware Pattern
 ```go
-func RequireAuth(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func RequireAuth() gin.HandlerFunc {
+    return func(c *gin.Context) {
         // Validate JWT from cookie or Authorization header
-        // Add userID to context
-        ctx := context.WithValue(r.Context(), UserIDKey, userID)
-        next.ServeHTTP(w, r.WithContext(ctx))
-    })
+        // Set userID in Gin context
+        c.Set("userID", userID)
+        c.Next()
+    }
 }
 ```
 
-### Ownership Check Pattern
+### Logging Pattern
 ```go
-var authorID *string
-h.db.QueryRow(ctx, "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
-if authorID == nil || *authorID != userID {
-    respondError(w, http.StatusForbidden, "You don't have permission")
-    return
-}
+logger.L().Info("message", "key", value)
+logger.L().Error("failed", "error", err)
+```
+
+### Config Pattern
+```go
+cfg, err := config.LoadConfig()
+// cfg.HTTPServer.Address() -> "0.0.0.0:3004"
+// cfg.Jwt.Secret
+// cfg.Database.URL
 ```
 
 ## Database Schema
@@ -136,7 +139,6 @@ if authorID == nil || *authorID != userID {
 Uses same PostgreSQL schema as other backends:
 
 ```sql
--- Users table
 CREATE TABLE users (
     id VARCHAR PRIMARY KEY,
     username VARCHAR UNIQUE NOT NULL,
@@ -146,7 +148,6 @@ CREATE TABLE users (
     updated_at TIMESTAMP
 );
 
--- Campgrounds table
 CREATE TABLE campgrounds (
     id SERIAL PRIMARY KEY,
     name VARCHAR NOT NULL,
@@ -159,7 +160,6 @@ CREATE TABLE campgrounds (
     updated_at TIMESTAMP
 );
 
--- Comments table
 CREATE TABLE comments (
     id SERIAL PRIMARY KEY,
     text TEXT NOT NULL,
@@ -170,24 +170,15 @@ CREATE TABLE comments (
 );
 ```
 
-## Key Differences from Node.js APIs
-
-| Aspect | Go | Node.js |
-|--------|-----|---------|
-| Concurrency | Goroutines (built-in) | Event loop |
-| Type safety | Compile-time | Runtime (TS helps) |
-| Error handling | Explicit returns | try/catch |
-| Dependency injection | Manual (structs) | Container or manual |
-| HTTP router | Chi (stdlib-compatible) | Express/Hono |
-
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| HOST | Server bind address | 0.0.0.0 |
 | PORT | Server port | 3004 |
 | DATABASE_URL | PostgreSQL connection string | Required |
 | JWT_SECRET | Secret for signing JWTs | Required |
-| CORS_ORIGIN | Allowed CORS origin | http://localhost:3000 |
+| CORS_ORIGIN | Primary allowed CORS origin | http://localhost:3000 |
 
 ## Testing
 
@@ -208,14 +199,16 @@ go test ./internal/handlers/...
 1. Create handler file in `internal/handlers/`
 2. Create struct with `*pgxpool.Pool` field
 3. Add constructor function `New<Name>Handler(db *pgxpool.Pool)`
-4. Wire up in `cmd/server/main.go`
+4. Handler methods take `(c *gin.Context)`
+5. Wire up in `cmd/server/main.go` route groups
 
 ### Add New Middleware
 1. Create in `internal/middleware/`
-2. Follow `func(next http.Handler) http.Handler` signature
-3. Apply with `r.Use(middleware.Name)` in router
+2. Return `gin.HandlerFunc`
+3. Use `c.Set()` / `c.Get()` for context values
+4. Use `c.Abort()` or `c.AbortWithStatusJSON()` to stop chain
+5. Call `c.Next()` to continue
 
 ### Add Validation
-1. Add struct tags in `internal/models/models.go`
-2. Use `validate:"required,min=3"` format
-3. Call `validator.Validate(req)` in handler
+1. Add `binding:"..."` tags in `internal/models/models.go`
+2. Use `c.ShouldBindJSON(&req)` in handler — binding + validation in one step
