@@ -197,6 +197,29 @@ func TestCampgroundHandler_Update_Success(t *testing.T) {
 	}
 }
 
+func TestCampgroundHandler_Update_NotFound(t *testing.T) {
+	db := &mock.MockDB{
+		QueryRowFunc: func(ctx context.Context, sql string, args ...any) pgx.Row {
+			return &mock.MockRow{ScanFunc: func(dest ...any) error {
+				return fmt.Errorf("no rows in result set")
+			}}
+		},
+	}
+
+	handler := NewCampgroundHandler(db)
+
+	w := httptest.NewRecorder()
+	c, _ := mock.NewTestGinContext(w)
+	mock.SetAuthContext(c, mock.TestUserID)
+	mock.SetURLParams(c, map[string]string{"id": "999"})
+
+	handler.Update(c)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
 func TestCampgroundHandler_Update_NotOwner(t *testing.T) {
 	otherUser := "other-user-id"
 	db := &mock.MockDB{
@@ -219,6 +242,29 @@ func TestCampgroundHandler_Update_NotOwner(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Errorf("Expected status 403, got %d", w.Code)
+	}
+}
+
+func TestCampgroundHandler_Delete_NotFound(t *testing.T) {
+	db := &mock.MockDB{
+		QueryRowFunc: func(ctx context.Context, sql string, args ...any) pgx.Row {
+			return &mock.MockRow{ScanFunc: func(dest ...any) error {
+				return fmt.Errorf("no rows in result set")
+			}}
+		},
+	}
+
+	handler := NewCampgroundHandler(db)
+
+	w := httptest.NewRecorder()
+	c, _ := mock.NewTestGinContext(w)
+	mock.SetAuthContext(c, mock.TestUserID)
+	mock.SetURLParams(c, map[string]string{"id": "999"})
+
+	handler.Delete(c)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
 	}
 }
 

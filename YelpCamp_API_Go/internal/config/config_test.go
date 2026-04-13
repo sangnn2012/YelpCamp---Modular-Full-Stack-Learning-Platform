@@ -7,30 +7,38 @@ import (
 	"testing"
 )
 
-func TestLoadConfig_Defaults(t *testing.T) {
-	// Clear any env vars that could interfere
+func TestLoadConfig_MissingRequiredVars(t *testing.T) {
 	os.Unsetenv("HOST")
 	os.Unsetenv("PORT")
 	os.Unsetenv("JWT_SECRET")
 	os.Unsetenv("DATABASE_URL")
 	os.Unsetenv("CORS_ORIGIN")
 
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Errorf("LoadConfig() returned error: %v", err)
+	_, err := LoadConfig()
+	if err == nil {
+		t.Errorf("Expected error when required vars are missing, got nil")
 	}
+}
 
-	if cfg.HTTPServer.Host != "0.0.0.0" {
-		t.Errorf("Expected default host '0.0.0.0', got '%s'", cfg.HTTPServer.Host)
+func TestLoadConfig_MissingDatabaseURL(t *testing.T) {
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("JWT_SECRET")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Errorf("Expected error when DATABASE_URL is missing, got nil")
 	}
-	if cfg.HTTPServer.Port != "3004" {
-		t.Errorf("Expected default port '3004', got '%s'", cfg.HTTPServer.Port)
-	}
-	if cfg.Jwt.Secret != "" {
-		t.Errorf("Expected empty JWT secret, got '%s'", cfg.Jwt.Secret)
-	}
-	if cfg.Database.URL != "" {
-		t.Errorf("Expected empty database URL, got '%s'", cfg.Database.URL)
+}
+
+func TestLoadConfig_MissingJWTSecret(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://localhost/test")
+	os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("DATABASE_URL")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Errorf("Expected error when JWT_SECRET is missing, got nil")
 	}
 }
 

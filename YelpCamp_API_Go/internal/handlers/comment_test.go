@@ -128,6 +128,30 @@ func TestCommentHandler_Update_Success(t *testing.T) {
 	}
 }
 
+func TestCommentHandler_Update_NotFound(t *testing.T) {
+	db := &mock.MockDB{
+		QueryRowFunc: func(ctx context.Context, sql string, args ...any) pgx.Row {
+			return &mock.MockRow{ScanFunc: func(dest ...any) error {
+				return fmt.Errorf("no rows in result set")
+			}}
+		},
+	}
+
+	handler := NewCommentHandler(db)
+
+	w := httptest.NewRecorder()
+	c, _ := mock.NewTestGinContext(w)
+	mock.SetAuthContext(c, mock.TestUserID)
+	mock.SetURLParams(c, map[string]string{"id": "999"})
+	mock.SetJSONBody(c, map[string]string{"text": "Updated"})
+
+	handler.Update(c)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
 func TestCommentHandler_Update_NotOwner(t *testing.T) {
 	otherUser := "other-user"
 	db := &mock.MockDB{
@@ -179,6 +203,29 @@ func TestCommentHandler_Delete_Success(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+}
+
+func TestCommentHandler_Delete_NotFound(t *testing.T) {
+	db := &mock.MockDB{
+		QueryRowFunc: func(ctx context.Context, sql string, args ...any) pgx.Row {
+			return &mock.MockRow{ScanFunc: func(dest ...any) error {
+				return fmt.Errorf("no rows in result set")
+			}}
+		},
+	}
+
+	handler := NewCommentHandler(db)
+
+	w := httptest.NewRecorder()
+	c, _ := mock.NewTestGinContext(w)
+	mock.SetAuthContext(c, mock.TestUserID)
+	mock.SetURLParams(c, map[string]string{"id": "999"})
+
+	handler.Delete(c)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
 	}
 }
 
