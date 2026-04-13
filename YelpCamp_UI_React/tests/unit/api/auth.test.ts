@@ -56,7 +56,9 @@ describe('auth API', () => {
         session: { id: 's1', userId: '1', expiresAt: '' },
       })
       await login('alice', 'password123')
-      expect(mockPostJson).toHaveBeenCalled()
+      expect(mockPostRaw).toHaveBeenCalledWith('auth/sign-in/username', {
+        json: { username: 'alice', password: 'password123' },
+      })
     })
 
     it('returns mapped User on success', async () => {
@@ -75,13 +77,15 @@ describe('auth API', () => {
   })
 
   describe('register', () => {
-    it('POSTs to auth/sign-up/username', async () => {
+    it('POSTs to auth/sign-up/username with name field', async () => {
       mockPostJson.mockResolvedValue({
         user: { id: '2', username: 'bob', createdAt: '', updatedAt: '' },
         session: { id: 's2', userId: '2', expiresAt: '' },
       })
       await register('bob', 'password123')
-      expect(mockPostJson).toHaveBeenCalled()
+      expect(mockPostRaw).toHaveBeenCalledWith('auth/sign-up/username', {
+        json: { username: 'bob', password: 'password123', name: 'bob' },
+      })
     })
 
     it('returns mapped User on success', async () => {

@@ -181,6 +181,36 @@ describe('campgroundSchema', () => {
       expect(result.data.location).toBe('Yosemite, CA')
     }
   })
+
+  it('rejects whitespace-only name', () => {
+    const result = campgroundSchema.safeParse({ ...validCampground, name: '   ' })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects whitespace-only description', () => {
+    const result = campgroundSchema.safeParse({ ...validCampground, description: '   ' })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects non-numeric price', () => {
+    const result = campgroundSchema.safeParse({ ...validCampground, price: 'free' })
+    expect(result.success).toBe(false)
+  })
+
+  it('passes valid numeric price', () => {
+    const result = campgroundSchema.safeParse({ ...validCampground, price: '25.50' })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects javascript: URI for image', () => {
+    const result = campgroundSchema.safeParse({ ...validCampground, image: 'javascript:alert(1)' })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects data: URI for image', () => {
+    const result = campgroundSchema.safeParse({ ...validCampground, image: 'data:text/html,hello' })
+    expect(result.success).toBe(false)
+  })
 })
 
 describe('commentSchema', () => {
@@ -217,6 +247,11 @@ describe('commentSchema', () => {
 
   it('fails missing text field', () => {
     const result = commentSchema.safeParse({})
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects whitespace-only text', () => {
+    const result = commentSchema.safeParse({ text: '   ' })
     expect(result.success).toBe(false)
   })
 })

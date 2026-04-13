@@ -64,15 +64,13 @@ describe('Auth Flow Integration', () => {
     expect(screen.getByText('bob')).toBeInTheDocument()
   })
 
-  it('register updates auth store + adds welcome flash', async () => {
+  it('register updates auth store and sets user', async () => {
     mocked.register.mockResolvedValue({ id: '2', username: 'charlie' })
     const result = await useAuthStore.getState().register('charlie', 'password')
 
     expect(result.success).toBe(true)
-    useFlashStore.getState().success('Welcome to YelpCamp, charlie!')
-
     expect(useAuthStore.getState().user?.username).toBe('charlie')
-    expect(useFlashStore.getState().messages[0].message).toContain('charlie')
+    expect(mocked.register).toHaveBeenCalledWith('charlie', 'password')
   })
 
   it('logout clears user and header switches to anonymous', async () => {

@@ -56,12 +56,10 @@ test.describe('Campgrounds', () => {
 
   test('view campground detail', async ({ page }) => {
     await page.goto('/campgrounds')
-    // Click the first "View Details" button if there are campgrounds
     const viewButton = page.getByText('View Details').first()
-    if (await viewButton.isVisible()) {
-      await viewButton.click()
-      await expect(page).toHaveURL(/\/campgrounds\/\d+/)
-    }
+    await expect(viewButton).toBeVisible({ timeout: 10000 })
+    await viewButton.click()
+    await expect(page).toHaveURL(/\/campgrounds\/\d+/)
   })
 
   test('unauthenticated user cannot see Add Campground button', async ({ page }) => {

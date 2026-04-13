@@ -29,34 +29,28 @@ test.describe('Comments', () => {
     await registerAndLogin(page)
     await createCampground(page)
 
-    // Navigate to the first campground detail
     const viewButton = page.getByText('View Details').first()
-    if (await viewButton.isVisible()) {
-      await viewButton.click()
-      await expect(page).toHaveURL(/\/campgrounds\/\d+/)
+    await expect(viewButton).toBeVisible({ timeout: 10000 })
+    await viewButton.click()
+    await expect(page).toHaveURL(/\/campgrounds\/\d+/)
 
-      // Click "Add Comment"
-      const addComment = page.getByText('Add Comment')
-      if (await addComment.isVisible()) {
-        await addComment.click()
-        await expect(page).toHaveURL(/\/comments\/new/)
+    const addComment = page.getByText('Add Comment')
+    await expect(addComment).toBeVisible()
+    await addComment.click()
+    await expect(page).toHaveURL(/\/comments\/new/)
 
-        await page.fill('textarea#text', 'E2E test comment')
-        await page.click('button[type="submit"]')
+    await page.fill('textarea#text', 'E2E test comment')
+    await page.click('button[type="submit"]')
 
-        // Should redirect back to campground detail
-        await expect(page).toHaveURL(/\/campgrounds\/\d+$/)
-        await expect(page.getByText('E2E test comment')).toBeVisible()
-      }
-    }
+    await expect(page).toHaveURL(/\/campgrounds\/\d+/)
+    await expect(page.getByText('E2E test comment')).toBeVisible()
   })
 
   test('unauthenticated user cannot see Add Comment button', async ({ page }) => {
     await page.goto('/campgrounds')
     const viewButton = page.getByText('View Details').first()
-    if (await viewButton.isVisible()) {
-      await viewButton.click()
-      await expect(page.getByText('Add Comment')).not.toBeVisible()
-    }
+    await expect(viewButton).toBeVisible({ timeout: 10000 })
+    await viewButton.click()
+    await expect(page.getByText('Add Comment')).not.toBeVisible()
   })
 })
