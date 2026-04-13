@@ -187,7 +187,11 @@ func (h *CampgroundHandler) Update(c *gin.Context) {
 
 	// Check ownership
 	var authorID *string
-	h.db.QueryRow(c.Request.Context(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
+	err = h.db.QueryRow(c.Request.Context(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
+		return
+	}
 	if authorID == nil || *authorID != userID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to do that"})
 		return
@@ -228,7 +232,11 @@ func (h *CampgroundHandler) Delete(c *gin.Context) {
 
 	// Check ownership
 	var authorID *string
-	h.db.QueryRow(c.Request.Context(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
+	err = h.db.QueryRow(c.Request.Context(), "SELECT author_id FROM campgrounds WHERE id = $1", id).Scan(&authorID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
+		return
+	}
 	if authorID == nil || *authorID != userID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to do that"})
 		return
