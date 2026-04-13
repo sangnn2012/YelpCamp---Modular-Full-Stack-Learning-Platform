@@ -1,6 +1,11 @@
 package config
 
-import "os"
+import (
+	"fmt"
+	"os"
+
+	"github.com/joho/godotenv"
+)
 
 // HTTPServerConfig holds the configuration for the HTTP server.
 type HTTPServerConfig struct {
@@ -40,7 +45,11 @@ type Config struct {
 }
 
 // LoadConfig loads configuration from environment variables.
+// It attempts to load a .env file first (non-fatal if missing).
 func LoadConfig() (*Config, error) {
+	// Load .env file if present (non-fatal if missing)
+	_ = godotenv.Load()
+
 	cfg := &Config{
 		HTTPServer: HTTPServerConfig{
 			Host: getEnvOrDefault("HOST", "0.0.0.0"),
@@ -59,6 +68,15 @@ func LoadConfig() (*Config, error) {
 			},
 		},
 	}
+
+	// Validate required configuration
+	if cfg.Database.URL == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+	if cfg.Jwt.Secret == "" {
+		return nil, fmt.Errorf("JWT_SECRET is required")
+	}
+
 	return cfg, nil
 }
 
