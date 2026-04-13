@@ -19,7 +19,10 @@ const app = new Hono()
 const PORT = parseInt(process.env.PORT ?? '3001', 10)
 const ALLOWED_ORIGINS = [
   'http://localhost:3000', // Nuxt frontend
-  'http://localhost:3001'  // API itself (for testing)
+  'http://localhost:3001', // API itself (for testing)
+  'http://localhost:3003', // Vue frontend
+  'http://localhost:4200', // Angular frontend
+  'http://localhost:3005', // React frontend
 ]
 
 // ============================================================================

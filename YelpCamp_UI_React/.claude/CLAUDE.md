@@ -80,9 +80,11 @@ pnpm test:run     # Vitest single run
 
 ## Key Patterns
 
-### React Compiler (no manual memoization)
-The React Compiler is enabled via `babel-plugin-react-compiler` in Vite config.
-Do NOT use `useMemo`, `useCallback`, or `React.memo` — the compiler handles it.
+### React Compiler (not yet enabled)
+The React Compiler (`babel-plugin-react-compiler`) is installed but NOT active.
+`@vitejs/plugin-react` v6 removed the `babel` option in favor of OXC transforms.
+The new `reactCompilerPreset` export requires `@rolldown/plugin-babel` setup.
+Until enabled, avoid unnecessary `useMemo`/`useCallback` but don't rely on auto-memoization.
 
 ### TanStack Router File-Based Routing
 Routes are auto-generated from `src/routes/`. The route tree is in `src/routeTree.gen.ts` (auto-generated, do not edit).
