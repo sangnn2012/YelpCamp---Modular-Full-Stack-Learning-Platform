@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { MapPin, MessageSquarePlus, Pencil, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { CommentItem } from '@/components/comment-item'
 import { ErrorDisplay } from '@/components/error-display'
 import { LoadingSpinner } from '@/components/loading-spinner'
@@ -26,6 +27,7 @@ function CampgroundDetail() {
   const { data: campground, isLoading, error } = useCampground(numericId)
   const deleteMutation = useDeleteCampground()
   const deleteCommentMutation = useDeleteComment(numericId)
+  const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null)
 
   if (isLoading) return <LoadingSpinner />
   if (error || !campground) return <ErrorDisplay message="Campground not found" />
@@ -43,11 +45,14 @@ function CampgroundDetail() {
 
   const handleDeleteComment = async (commentId: number) => {
     if (!confirm('Delete this comment?')) return
+    setDeletingCommentId(commentId)
     try {
       await deleteCommentMutation.mutateAsync(commentId)
       flash.success('Comment deleted')
     } catch (err) {
       flash.error(err instanceof Error ? err.message : 'Failed to delete comment')
+    } finally {
+      setDeletingCommentId(null)
     }
   }
 
@@ -125,7 +130,7 @@ function CampgroundDetail() {
                     comment={comment}
                     campgroundId={numericId}
                     onDelete={handleDeleteComment}
-                    deleting={deleteCommentMutation.isPending}
+                    deleting={deletingCommentId === comment.id}
                   />
                 ))}
               </div>
