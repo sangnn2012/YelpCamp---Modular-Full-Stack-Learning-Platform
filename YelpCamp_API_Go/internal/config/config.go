@@ -65,6 +65,7 @@ func LoadConfig() (*Config, error) {
 			AllowedOrigins: []string{
 				getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000"),
 				"http://localhost:3003",
+				"http://localhost:3005",
 			},
 		},
 	}

@@ -29,6 +29,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	if req.Email == "" {
+		req.Email = req.Username + "@yelpcamp.local"
+	}
+
 	// Check if user exists
 	var exists bool
 	err := h.db.QueryRow(c.Request.Context(),

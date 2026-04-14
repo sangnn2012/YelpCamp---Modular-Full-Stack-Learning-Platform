@@ -44,6 +44,7 @@ func main() {
 
 	// Setup Gin engine
 	engine := gin.New()
+	engine.RedirectTrailingSlash = false
 	engine.Use(gin.Recovery(), ginLogMiddleware())
 	engine.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
@@ -74,13 +75,13 @@ func main() {
 	// Campground routes
 	campgrounds := api.Group("/campgrounds")
 	{
-		campgrounds.GET("/", campgroundHandler.List)
+		campgrounds.GET("", campgroundHandler.List)
 		campgrounds.GET("/:id", campgroundHandler.GetByID)
 
-		protected := campgrounds.Group("/")
+		protected := campgrounds.Group("")
 		protected.Use(mw.RequireAuth(cfg.Jwt.Secret))
 		{
-			protected.POST("/", campgroundHandler.Create)
+			protected.POST("", campgroundHandler.Create)
 			protected.PUT("/:id", campgroundHandler.Update)
 			protected.DELETE("/:id", campgroundHandler.Delete)
 		}
@@ -90,7 +91,7 @@ func main() {
 	campgroundComments := api.Group("/campgrounds/:campgroundId/comments")
 	campgroundComments.Use(mw.RequireAuth(cfg.Jwt.Secret))
 	{
-		campgroundComments.POST("/", commentHandler.Create)
+		campgroundComments.POST("", commentHandler.Create)
 	}
 
 	// Comment routes (standalone)
