@@ -11,7 +11,7 @@ import { useCampgrounds } from '@/hooks/use-campgrounds'
 import { useAuthStore } from '@/stores/auth-store'
 
 const searchSchema = z.object({
-  page: z.number().optional().default(1),
+  page: z.coerce.number().int().min(1).catch(1).default(1),
   search: z.string().optional(),
 })
 
@@ -45,13 +45,13 @@ function CampgroundsPage() {
     <div>
       <div className="mb-8 text-center">
         <h1 className="mb-2 text-3xl font-bold">Welcome to YelpCamp!</h1>
-        <p className="text-gray-600">View our hand-picked campgrounds from all over</p>
+        <p className="text-muted-foreground">View our hand-picked campgrounds from all over</p>
       </div>
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <form onSubmit={handleSearch} className="flex gap-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search campgrounds..."
               value={searchInput}
@@ -77,7 +77,7 @@ function CampgroundsPage() {
       {isLoading ? (
         <LoadingSpinner />
       ) : data?.campgrounds.length === 0 ? (
-        <p className="py-12 text-center text-gray-500">No campgrounds found.</p>
+        <p className="py-12 text-center text-muted-foreground">No campgrounds found.</p>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -101,7 +101,7 @@ function CampgroundsPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Page {data.pagination.page} of {data.pagination.totalPages}
               </span>
               <Button
