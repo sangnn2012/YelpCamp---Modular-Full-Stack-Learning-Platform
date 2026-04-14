@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGet = vi.fn()
 const mockPost = vi.fn()
@@ -15,69 +15,84 @@ vi.mock('@/api/client', () => ({
 }))
 
 import {
-  fetchCampgrounds,
-  fetchCampground,
   createCampground,
-  updateCampground,
   deleteCampground,
+  fetchCampground,
+  fetchCampgrounds,
+  updateCampground,
 } from '@/api/campgrounds'
-import { mockCampgroundList, mockCampground, mockApiSuccess } from '@/test/mocks/api'
+import { mockApiSuccess, mockCampground, mockCampgroundSummary } from '@/test/mocks/api'
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
 describe('campgrounds API', () => {
-  it('fetchCampgrounds sends GET with page param', async () => {
-    const data = mockCampgroundList()
-    mockGet.mockResolvedValue(data)
-    const result = await fetchCampgrounds(2)
-    expect(mockGet).toHaveBeenCalledWith('campgrounds', { searchParams: { page: '2' } })
-    expect(result).toEqual(data)
-  })
+  describe('fetchCampgrounds (Go → React shape adapter)', () => {
+    it("transforms Go's {data, pagination} into React's {campgrounds, pagination}", async () => {
+      const summaries = [mockCampgroundSummary({ id: 1 }), mockCampgroundSummary({ id: 2 })]
+      const pagination = { page: 1, limit: 12, total: 2, totalPages: 1, hasMore: false }
+      mockGet.mockResolvedValue({ data: summaries, pagination })
 
-  it('fetchCampgrounds includes search param when provided', async () => {
-    mockGet.mockResolvedValue(mockCampgroundList())
-    await fetchCampgrounds(1, 'mountain')
-    expect(mockGet).toHaveBeenCalledWith('campgrounds', {
-      searchParams: { page: '1', search: 'mountain' },
+      const result = await fetchCampgrounds(1)
+
+      expect(result).toEqual({ campgrounds: summaries, pagination })
+    })
+
+    it('sends GET with page param stringified', async () => {
+      mockGet.mockResolvedValue({ data: [], pagination: {} })
+      await fetchCampgrounds(2)
+      expect(mockGet).toHaveBeenCalledWith('campgrounds', { searchParams: { page: '2' } })
+    })
+
+    it('includes search param when provided', async () => {
+      mockGet.mockResolvedValue({ data: [], pagination: {} })
+      await fetchCampgrounds(1, 'mountain')
+      expect(mockGet).toHaveBeenCalledWith('campgrounds', {
+        searchParams: { page: '1', search: 'mountain' },
+      })
+    })
+
+    it('omits search param when falsy (empty string, undefined)', async () => {
+      mockGet.mockResolvedValue({ data: [], pagination: {} })
+      await fetchCampgrounds(1, '')
+      expect(mockGet).toHaveBeenCalledWith('campgrounds', { searchParams: { page: '1' } })
     })
   })
 
-  it('fetchCampgrounds omits search when undefined', async () => {
-    mockGet.mockResolvedValue(mockCampgroundList())
-    await fetchCampgrounds(1, undefined)
-    expect(mockGet).toHaveBeenCalledWith('campgrounds', { searchParams: { page: '1' } })
+  describe('fetchCampground', () => {
+    it('sends GET to campgrounds/{id}', async () => {
+      const camp = mockCampground({ id: 5 })
+      mockGet.mockResolvedValue(camp)
+      const result = await fetchCampground(5)
+      expect(mockGet).toHaveBeenCalledWith('campgrounds/5')
+      expect(result).toEqual(camp)
+    })
   })
 
-  it('fetchCampground sends GET to campgrounds/{id}', async () => {
-    const camp = mockCampground()
-    mockGet.mockResolvedValue(camp)
-    const result = await fetchCampground(5)
-    expect(mockGet).toHaveBeenCalledWith('campgrounds/5')
-    expect(result).toEqual(camp)
+  describe('createCampground', () => {
+    it('sends POST with JSON body', async () => {
+      mockPost.mockResolvedValue(mockCampground())
+      const dto = { name: 'New', price: '10', image: 'https://x.com/i.jpg', description: 'Desc' }
+      await createCampground(dto)
+      expect(mockPost).toHaveBeenCalledWith('campgrounds', { json: dto })
+    })
   })
 
-  it('createCampground sends POST with JSON body', async () => {
-    const camp = mockCampground()
-    mockPost.mockResolvedValue(camp)
-    const dto = { name: 'New', price: '10', image: 'https://x.com/i.jpg', description: 'Desc' }
-    await createCampground(dto)
-    expect(mockPost).toHaveBeenCalledWith('campgrounds', { json: dto })
+  describe('updateCampground', () => {
+    it('sends PUT to campgrounds/{id}', async () => {
+      mockPut.mockResolvedValue(mockCampground())
+      await updateCampground(3, { name: 'Updated' })
+      expect(mockPut).toHaveBeenCalledWith('campgrounds/3', { json: { name: 'Updated' } })
+    })
   })
 
-  it('updateCampground sends PUT to campgrounds/{id}', async () => {
-    const camp = mockCampground()
-    mockPut.mockResolvedValue(camp)
-    const dto = { name: 'Updated' }
-    await updateCampground(3, dto)
-    expect(mockPut).toHaveBeenCalledWith('campgrounds/3', { json: dto })
-  })
-
-  it('deleteCampground sends DELETE to campgrounds/{id}', async () => {
-    mockDelete.mockResolvedValue(mockApiSuccess('Deleted'))
-    const result = await deleteCampground(3)
-    expect(mockDelete).toHaveBeenCalledWith('campgrounds/3')
-    expect(result.success).toBe(true)
+  describe('deleteCampground', () => {
+    it('sends DELETE to campgrounds/{id}', async () => {
+      mockDelete.mockResolvedValue(mockApiSuccess('Deleted'))
+      const result = await deleteCampground(3)
+      expect(mockDelete).toHaveBeenCalledWith('campgrounds/3')
+      expect(result.success).toBe(true)
+    })
   })
 })

@@ -31,9 +31,18 @@ beforeEach(() => {
 describe('AppHeader', () => {
   it('renders YelpCamp logo linking to /', () => {
     render(<AppHeader />)
-    const logo = screen.getByText('YelpCamp')
-    expect(logo).toBeInTheDocument()
-    expect(logo).toHaveAttribute('href', '/')
+    const link = screen.getByRole('link', { name: /YelpCamp home/i })
+    expect(link).toHaveAttribute('href', '/')
+    expect(link).toHaveTextContent('YelpCamp')
+  })
+
+  it('renders React + Go stack badge alongside the brand wordmark', () => {
+    render(<AppHeader />)
+    expect(screen.getByText('React')).toBeInTheDocument()
+    expect(screen.getByText('Go')).toBeInTheDocument()
+    // React logo/mark should have the accessible name "React"
+    expect(screen.getByRole('img', { name: 'React' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /gopher/i })).toBeInTheDocument()
   })
 
   it('renders Campgrounds link', () => {

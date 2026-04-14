@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGet = vi.fn()
 const mockPost = vi.fn()
@@ -14,41 +14,59 @@ vi.mock('@/api/client', () => ({
   },
 }))
 
-import { createComment, fetchComment, updateComment, deleteComment } from '@/api/comments'
-import { mockComment, mockApiSuccess } from '@/test/mocks/api'
+import { createComment, deleteComment, fetchComment, updateComment } from '@/api/comments'
+import { mockApiSuccess, mockCampground, mockComment } from '@/test/mocks/api'
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('comments API', () => {
-  it('createComment sends POST with JSON body including campgroundId', async () => {
-    const comment = mockComment()
-    mockPost.mockResolvedValue(comment)
-    const dto = { text: 'Nice!', campgroundId: 1 }
-    await createComment(dto)
-    expect(mockPost).toHaveBeenCalledWith('comments', { json: dto })
+describe('comments API (Go nested routes)', () => {
+  describe('createComment', () => {
+    it('POSTs to campgrounds/{campgroundId}/comments with only {text} in body', async () => {
+      mockPost.mockResolvedValue(mockComment())
+      await createComment({ text: 'Nice!', campgroundId: 7 })
+
+      // campgroundId goes in the URL, NOT the body — Go reads it from the path param.
+      expect(mockPost).toHaveBeenCalledWith('campgrounds/7/comments', {
+        json: { text: 'Nice!' },
+      })
+    })
   })
 
-  it('fetchComment sends GET to comments/{id}', async () => {
-    const comment = mockComment({ id: 5 })
-    mockGet.mockResolvedValue(comment)
-    const result = await fetchComment(5)
-    expect(mockGet).toHaveBeenCalledWith('comments/5')
-    expect(result).toEqual(comment)
+  describe('fetchComment', () => {
+    it('pulls comment from the parent campground (Go has no GET /comments/:id endpoint)', async () => {
+      const target = mockComment({ id: 5, text: 'Found me' })
+      mockGet.mockResolvedValue(
+        mockCampground({ id: 3, comments: [mockComment({ id: 4 }), target, mockComment({ id: 6 })] }),
+      )
+
+      const result = await fetchComment(3, 5)
+
+      expect(mockGet).toHaveBeenCalledWith('campgrounds/3')
+      expect(result).toEqual(target)
+    })
+
+    it('throws when the comment id is not found on the campground', async () => {
+      mockGet.mockResolvedValue(mockCampground({ id: 3, comments: [mockComment({ id: 1 })] }))
+      await expect(fetchComment(3, 999)).rejects.toThrow('Comment not found')
+    })
   })
 
-  it('updateComment sends PUT to comments/{id}', async () => {
-    const comment = mockComment()
-    mockPut.mockResolvedValue(comment)
-    await updateComment(3, { text: 'Updated' })
-    expect(mockPut).toHaveBeenCalledWith('comments/3', { json: { text: 'Updated' } })
+  describe('updateComment', () => {
+    it('PUTs to comments/{id}', async () => {
+      mockPut.mockResolvedValue(mockComment())
+      await updateComment(3, { text: 'Updated' })
+      expect(mockPut).toHaveBeenCalledWith('comments/3', { json: { text: 'Updated' } })
+    })
   })
 
-  it('deleteComment sends DELETE to comments/{id}', async () => {
-    mockDelete.mockResolvedValue(mockApiSuccess('Comment deleted'))
-    const result = await deleteComment(3)
-    expect(mockDelete).toHaveBeenCalledWith('comments/3')
-    expect(result.success).toBe(true)
+  describe('deleteComment', () => {
+    it('DELETEs comments/{id}', async () => {
+      mockDelete.mockResolvedValue(mockApiSuccess('Deleted'))
+      const result = await deleteComment(3)
+      expect(mockDelete).toHaveBeenCalledWith('comments/3')
+      expect(result.success).toBe(true)
+    })
   })
 })
