@@ -40,9 +40,9 @@ function CommentEdit() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['comment', numericCommentId],
-    queryFn: () => fetchComment(numericCommentId),
-    enabled: numericCommentId > 0,
+    queryKey: ['comment', numericId, numericCommentId],
+    queryFn: () => fetchComment(numericId, numericCommentId),
+    enabled: numericCommentId > 0 && numericId > 0,
   })
 
   const updateMutation = useUpdateComment(numericId)
@@ -87,7 +87,7 @@ function CommentEdit() {
         <Link
           to="/campgrounds/$id"
           params={{ id }}
-          className="text-sm text-gray-500 hover:text-gray-700"
+          className="text-sm text-muted-foreground hover:text-foreground"
         >
           &larr; Go Back
         </Link>

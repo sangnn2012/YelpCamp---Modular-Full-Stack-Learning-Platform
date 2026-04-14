@@ -2,15 +2,23 @@ import type {
   ApiSuccess,
   Campground,
   CampgroundListResponse,
+  CampgroundSummary,
   CreateCampgroundDto,
+  PaginationMeta,
   UpdateCampgroundDto,
 } from '@/types'
 import { api } from './client'
 
+interface GoPaginatedCampgrounds {
+  data: CampgroundSummary[]
+  pagination: PaginationMeta
+}
+
 export async function fetchCampgrounds(page = 1, search?: string): Promise<CampgroundListResponse> {
   const searchParams: Record<string, string> = { page: String(page) }
   if (search) searchParams.search = search
-  return api.get('campgrounds', { searchParams }).json<CampgroundListResponse>()
+  const response = await api.get('campgrounds', { searchParams }).json<GoPaginatedCampgrounds>()
+  return { campgrounds: response.data, pagination: response.pagination }
 }
 
 export async function fetchCampground(id: number): Promise<Campground> {

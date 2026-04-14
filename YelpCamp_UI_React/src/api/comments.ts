@@ -1,12 +1,19 @@
 import type { ApiSuccess, Comment, CreateCommentDto, UpdateCommentDto } from '@/types'
+import { fetchCampground } from './campgrounds'
 import { api } from './client'
 
 export async function createComment(data: CreateCommentDto): Promise<Comment> {
-  return api.post('comments', { json: data }).json<Comment>()
+  const { campgroundId, ...body } = data
+  return api.post(`campgrounds/${campgroundId}/comments`, { json: body }).json<Comment>()
 }
 
-export async function fetchComment(id: number): Promise<Comment> {
-  return api.get(`comments/${id}`).json<Comment>()
+export async function fetchComment(campgroundId: number, commentId: number): Promise<Comment> {
+  const campground = await fetchCampground(campgroundId)
+  const comment = campground.comments?.find((c) => c.id === commentId)
+  if (!comment) {
+    throw new Error('Comment not found')
+  }
+  return comment
 }
 
 export async function updateComment(id: number, data: UpdateCommentDto): Promise<Comment> {
