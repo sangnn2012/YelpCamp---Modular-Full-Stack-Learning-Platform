@@ -69,7 +69,7 @@ function CampgroundDetail() {
             <div>
               <h1 className="text-3xl font-bold">{campground.name}</h1>
               {campground.location && (
-                <p className="mt-1 flex items-center gap-1 text-gray-500">
+                <p className="mt-1 flex items-center gap-1 text-muted-foreground">
                   <MapPin className="h-4 w-4" />
                   {campground.location}
                 </p>
@@ -78,9 +78,9 @@ function CampgroundDetail() {
             <span className="text-2xl font-bold text-primary">${campground.price}/night</span>
           </div>
 
-          <p className="mt-4 text-gray-700 leading-relaxed">{campground.description}</p>
+          <p className="mt-4 text-foreground/85 leading-relaxed">{campground.description}</p>
 
-          <p className="mt-4 text-sm text-gray-500">
+          <p className="mt-4 text-sm text-muted-foreground">
             Submitted by <strong>{campground.author?.username ?? 'Unknown'}</strong>
           </p>
 
@@ -135,14 +135,14 @@ function CampgroundDetail() {
                 ))}
               </div>
             ) : (
-              <p className="py-4 text-center text-gray-400">No comments yet.</p>
+              <p className="py-4 text-center text-muted-foreground">No comments yet.</p>
             )}
           </div>
         </CardContent>
       </Card>
 
       <div className="mt-4 text-center">
-        <Link to="/campgrounds" className="text-sm text-gray-500 hover:text-gray-700">
+        <Link to="/campgrounds" className="text-sm text-muted-foreground hover:text-foreground">
           &larr; Back to campgrounds
         </Link>
       </div>

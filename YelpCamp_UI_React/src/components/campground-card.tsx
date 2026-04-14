@@ -16,7 +16,7 @@ export function CampgroundCard({ campground }: { campground: CampgroundSummary }
       <CardContent className="p-4">
         <h3 className="mb-1 text-lg font-semibold">{campground.name}</h3>
         {campground.location && (
-          <p className="mb-2 flex items-center gap-1 text-sm text-gray-500">
+          <p className="mb-2 flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="h-3 w-3" />
             {campground.location}
           </p>

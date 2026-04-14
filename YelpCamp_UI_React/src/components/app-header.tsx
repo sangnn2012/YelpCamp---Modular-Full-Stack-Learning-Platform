@@ -1,4 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router'
+import { AppLogo } from '@/components/app-logo'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth-store'
 import { useFlashStore } from '@/stores/flash-store'
@@ -16,13 +17,16 @@ export function AppHeader() {
   }
 
   return (
-    <header className="border-b bg-white shadow-sm">
+    <header className="border-b border-border bg-card shadow-sm">
       <div className="container mx-auto flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-6">
-          <Link to="/" className="text-xl font-bold text-primary">
-            YelpCamp
+          <Link to="/" aria-label="YelpCamp home">
+            <AppLogo />
           </Link>
-          <Link to="/campgrounds" className="text-sm font-medium text-gray-600 hover:text-gray-900">
+          <Link
+            to="/campgrounds"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
             Campgrounds
           </Link>
         </div>
@@ -30,7 +34,7 @@ export function AppHeader() {
         <div className="flex items-center gap-3">
           {user ? (
             <>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 Signed in as <strong>{user.username}</strong>
               </span>
               <Button variant="outline" size="sm" onClick={handleLogout}>

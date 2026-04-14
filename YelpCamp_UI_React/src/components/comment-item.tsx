@@ -22,9 +22,9 @@ export function CommentItem({ comment, campgroundId, onDelete, deleting }: Comme
         <div className="flex-1">
           <div className="mb-1 flex items-center gap-2">
             <span className="text-sm font-medium">{comment.author?.username ?? 'Unknown'}</span>
-            <span className="text-xs text-gray-400">{timeAgo}</span>
+            <span className="text-xs text-muted-foreground">{timeAgo}</span>
           </div>
-          <p className="text-sm text-gray-700">{comment.text}</p>
+          <p className="text-sm text-foreground/85">{comment.text}</p>
         </div>
 
         {isOwner(comment.authorId) && (
@@ -43,7 +43,7 @@ export function CommentItem({ comment, campgroundId, onDelete, deleting }: Comme
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+              className="h-7 w-7 p-0 text-red-400 hover:text-red-300"
               onClick={() => onDelete(comment.id)}
               disabled={deleting}
             >

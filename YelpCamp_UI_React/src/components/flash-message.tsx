@@ -10,9 +10,9 @@ const iconMap = {
 }
 
 const styleMap = {
-  success: 'border-green-200 bg-green-50 text-green-800',
-  error: 'border-red-200 bg-red-50 text-red-800',
-  info: 'border-blue-200 bg-blue-50 text-blue-800',
+  success: 'border-green-500/40 bg-green-500/10 text-green-300',
+  error: 'border-red-500/40 bg-red-500/10 text-red-300',
+  info: 'border-blue-500/40 bg-blue-500/10 text-blue-300',
 }
 
 export function FlashMessage() {
